@@ -1,0 +1,5 @@
+IOCPServer/Debug/
+IOCPServer/Release
+*.ncb
+*.suo
+*.user
