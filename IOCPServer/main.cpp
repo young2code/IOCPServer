@@ -63,10 +63,11 @@ void main(int argc, char* argv[])
 		{
 			Log::EnableTrace(false);
 		}
-		else if  (input == "`shutdown")
-		{
-			loop = false;
-		}
+		// we should have a way to cancel thread works started by TrySubmitThreadpoolCallback
+		//else if  (input == "`shutdown")
+		//{
+		//	loop = false;
+		//}
 	}
 
 	Server::Instance()->Shutdown();

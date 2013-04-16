@@ -44,14 +44,18 @@ void EchoService::Update()
 
 		if (client->PopRecvData(jsonData))
 		{
-			// Echo...
-			rapidjson::StringBuffer buffer;
-			rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-			jsonData.Accept(writer);
+			rapidjson::Value& type = jsonData["type"];
+			if (type.IsString() && 0 == _stricmp(type.GetString(), "echo"))
+			{
+				// Echo...
+				rapidjson::StringBuffer buffer;
+				rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+				jsonData.Accept(writer);
 
-			Packet* packet = Packet::Create(client, (const BYTE*)buffer.GetString(), buffer.Size()+1);
+				Packet* packet = Packet::Create(client, (const BYTE*)buffer.GetString(), buffer.Size()+1);
 
-			Server::Instance()->PostSend(client, packet);
+				Server::Instance()->PostSend(client, packet);
+			}
 		}
 	}
 }
