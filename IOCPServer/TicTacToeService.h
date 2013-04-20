@@ -30,7 +30,7 @@ private:
 		kStateSetPlayers,
 		kStatePlayer1Turn,
 		kStatePlayer2Turn,
-		kStateGameEnd,
+		kStateCheckResult,
 		kStateGameCanceled,
 	};
 
@@ -40,6 +40,19 @@ private:
 
 		Client* client;
 		std::string name;
+	};
+
+	enum Symbol
+	{
+		kSymbolNone = 0, 
+		kSymbolOOO,
+		kSymbolXXX, 
+	};
+
+	enum CellCount
+	{
+		kCellRows = 3,
+		kCellColumns = 3,
 	};
 
 private:
@@ -66,9 +79,9 @@ private:
 	void OnUpdatePlayer2Turn();
 	void OnLeavePlayer2Turn(int nNextState);
 
-	void OnEnterGameEnd(int nPrevState);
-	void OnUpdateGameEnd();
-	void OnLeaveGameEnd(int nNextState);
+	void OnEnterCheckResult(int nPrevState);
+	void OnUpdateCheckResult();
+	void OnLeaveCheckResult(int nNextState);
 
 	void OnEnterGameCanceled(int nPrevState);
 	void OnUpdateGameCanceled();
@@ -76,7 +89,14 @@ private:
 
 	void CheckPlayerConnection();
 
+
+	void SetPlayerName(Player& player);
+	void SetPlayerTurn(int playerTurn);
+	void CheckPlayerMove(Player& player, Symbol symbol);
+	void SetGameEnd(Symbol winning);
+
 	void Send(Player& player, rapidjson::Document& data);
+	void Broadcast(rapidjson::Document& data);
 
 private:
 	typedef std::vector<Client*> ClientList;
@@ -86,4 +106,9 @@ private:
 	FSM mFSM;
 	Player mPlayer1;
 	Player mPlayer2;
+	
+	Symbol mBoard[kCellRows][kCellColumns];
+
+	int mLastMoveRow;
+	int mLastMoveCol;
 };
