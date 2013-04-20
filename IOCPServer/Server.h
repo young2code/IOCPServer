@@ -10,6 +10,7 @@ class Packet;
 class IOEvent;
 
 class EchoService;
+class TicTacToeService;
 
 class Server :  public TSingleton<Server>
 {
@@ -72,7 +73,8 @@ private:
 
 	CRITICAL_SECTION m_CSForClients;
 
-	EchoService* m_Service;
+	//EchoService* m_Service;
+	TicTacToeService* m_Service;
 	TP_WORK* m_ServiceTPWORK; 
 	volatile bool m_LoopServiceUpdate;
 };

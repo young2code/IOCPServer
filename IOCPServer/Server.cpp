@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "EchoService.h"
+#include "TicTacToeService.h"
 
 using namespace std;
 
@@ -133,7 +134,8 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 	Packet::Init();
 
 	// Create Service
-	m_Service = new EchoService;
+	//m_Service = new EchoService;
+	m_Service = new TicTacToeService;
 	m_ServiceTPWORK = CreateThreadpoolWork(Server::WorkerServiceUpdate, this, NULL);
 	if(m_ServiceTPWORK == NULL)
 	{
@@ -428,7 +430,7 @@ void Server::OnSend(IOEvent* event, DWORD dwNumberOfBytesTransfered)
 {
 	assert(event);
 
-	LOG("[%d] OnSend : %d", GetCurrentThreadId(), dwNumberOfBytesTransfered);
+	LOG("[%d] OnSend : %d, client(%p)", GetCurrentThreadId(), dwNumberOfBytesTransfered, event->GetClient());
 
 	// This should be fast enough to do in this I/O thread.
 	// if not, we need to queue it like what we do in OnRecv().

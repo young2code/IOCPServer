@@ -3,3 +3,13 @@ IOCPServer/Release
 *.ncb
 *.suo
 *.user
+IOCPServer/_UpgradeReport_Files/UpgradeReport.css
+IOCPServer/_UpgradeReport_Files/UpgradeReport.xslt
+IOCPServer/_UpgradeReport_Files/UpgradeReport_Error.png
+IOCPServer/_UpgradeReport_Files/UpgradeReport_Information.png
+IOCPServer/_UpgradeReport_Files/UpgradeReport_Success.png
+IOCPServer/_UpgradeReport_Files/UpgradeReport_Warning.png
+IOCPServer/UpgradeLog.htm
+IOCPServer/UpgradeLog.XML
+IOCPServer/IOCPServer.opensdf
+IOCPServer/IOCPServer.sdf
