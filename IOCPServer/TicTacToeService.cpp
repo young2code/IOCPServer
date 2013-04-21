@@ -393,7 +393,18 @@ void TicTacToeService::SetGameEnd(Symbol winning)
 	data.SetObject();
 	data.AddMember("type", "tictactoe", data.GetAllocator());
 	data.AddMember("subtype", "result", data.GetAllocator());
-	data.AddMember("winner", winning == kSymbolOOO ? 1 : 2, data.GetAllocator());
+
+	switch(winning)
+	{
+	case kSymbolNone:	data.AddMember("winner", -1, data.GetAllocator());	break;
+	case kSymbolOOO:	data.AddMember("winner", 1, data.GetAllocator());	break;
+	case kSymbolXXX:	data.AddMember("winner", 2, data.GetAllocator());	break;
+
+	default:
+		assert(0);
+		return;
+	}
+
 	Broadcast(data);
 
 	m_Clients.clear();
@@ -462,6 +473,21 @@ bool TicTacToeService::CheckBackSlashStraight(Symbol symbol)
 	return true;
 }
 
+bool TicTacToeService::CheckBoardIsFull()
+{
+	for (int row = 0 ; row < kCellRows ; ++row)
+	{
+		for (int col = 0 ; col < kCellColumns ; ++col)
+		{
+			if (mBoard[row][col] == kSymbolNone)
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 
 void TicTacToeService::OnEnterCheckResult(int nPrevState)
 {
@@ -498,6 +524,13 @@ void TicTacToeService::OnEnterCheckResult(int nPrevState)
 	{
 		LOG("TicTacToeService::OnUpdateCheckResult() - / straight. [%d]", lastSymbol);
 		SetGameEnd(lastSymbol);
+		return;
+	}
+
+	if (CheckBoardIsFull())
+	{
+		LOG("TicTacToeService::OnUpdateCheckResult() - draw");
+		SetGameEnd(kSymbolNone);
 		return;
 	}
 

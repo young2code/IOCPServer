@@ -95,6 +95,7 @@ private:
 	bool CheckColStraight(int row, Symbol symbol);
 	bool CheckSlashStraight(Symbol symbol);
 	bool CheckBackSlashStraight(Symbol symbol);
+	bool CheckBoardIsFull();
 
 	void Send(Client* client, rapidjson::Document& data);
 	void Broadcast(rapidjson::Document& data);
