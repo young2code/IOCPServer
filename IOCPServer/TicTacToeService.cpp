@@ -11,7 +11,60 @@
 #include <rapidjson/stringbuffer.h>
 #include <boost/bind.hpp>
 
-/*static*/  void TicTacToeService::CreateOrEnter(Client* client, rapidjson::Document& data, std::vector<TicTacToeService*>& list)
+/*static*/ TicTacToeService::ServiceList TicTacToeService::sServices;
+
+/*static*/ void TicTacToeService::Init()
+{
+	LOG("TicTacToeService::Init()");
+}
+
+/*static*/ void TicTacToeService::Shutdown()
+{
+	LOG("TicTacToeService::Shutdown()");
+
+	for (size_t i = 0 ; i < sServices.size() ; ++i)
+	{
+		delete sServices[i];
+	}
+	sServices.clear();
+}
+
+
+/*static*/ void TicTacToeService::Update()
+{
+	for (size_t i = 0 ; i < sServices.size() ; ++i)
+	{
+		sServices[i]->UpdateInternal();
+	}
+
+	Flush();
+}
+
+/*static*/ void TicTacToeService::OnRecv(Client* client, rapidjson::Document& data)
+{
+	if (CreateOrEnter(client, data))
+	{
+		return;
+	}
+
+	for (size_t i = 0 ; i < sServices.size() ; ++i)
+	{
+		sServices[i]->OnRecvInternal(client, data);
+	}
+}
+
+/*static*/ void TicTacToeService::RemoveClient(Client* client)
+{
+	for (size_t i = 0 ; i < sServices.size() ; ++i)
+	{
+		if (!sServices[i]->RemoveClientInternal(client))
+		{
+			return;
+		}
+	}
+}
+
+/*static*/ bool TicTacToeService::CreateOrEnter(Client* client, rapidjson::Document& data)
 {
 	assert(data["type"].IsString());
 	std::string type(data["type"].GetString());
@@ -22,40 +75,36 @@
 
 		if (name == "tictactoe")
 		{
-			for (size_t i = 0 ; i < list.size() ; ++i)
+			for (size_t i = 0 ; i < sServices.size() ; ++i)
 			{
-				TicTacToeService* service = list[i];
+				TicTacToeService* service = sServices[i];
 
 				if (service->mFSM.GetState() == kStateWait && service->m_Clients.size() < 2)
 				{
 					service->AddClient(client);
-					return;
+					return true;
 				}
 			}
 
 			TicTacToeService* newService = new TicTacToeService;
-			newService->Init();
 			newService->AddClient(client);
-			list.push_back(newService);
-			return;
+			sServices.push_back(newService);
+			return true;
 		}
 	}
+	return false;
 }
 
-
-/*static*/ void TicTacToeService::Flush(std::vector<TicTacToeService*>& list)
+/*static*/ void TicTacToeService::Flush()
 {
-	// do whatever you want for caching.
-
-	for (auto itor = list.begin() ; itor != list.end() ; )
+	for (auto itor = sServices.begin() ; itor != sServices.end() ; )
 	{
 		TicTacToeService* service = *itor;
 
 		if (service->mFSM.GetState() == kStateWait && service->m_Clients.empty())
 		{
-			service->Shutdown();
 			delete service;
-			itor = list.erase(itor);
+			itor = sServices.erase(itor);
 		}
 		else
 		{
@@ -64,24 +113,13 @@
 	}
 }
 
-
 TicTacToeService::TicTacToeService(void)
-{
-}
-
-
-TicTacToeService::~TicTacToeService(void)
-{
-}
-
-
-void TicTacToeService::Init()
 {
 	InitFSM();
 }
 
 
-void TicTacToeService::Shutdown()
+TicTacToeService::~TicTacToeService(void)
 {
 	m_Clients.clear();
 
@@ -111,7 +149,7 @@ void TicTacToeService::ShutdownFSM()
 }
 
 
-void TicTacToeService::Update()
+void TicTacToeService::UpdateInternal()
 {
 	CheckPlayerConnection();
 
@@ -119,7 +157,7 @@ void TicTacToeService::Update()
 }
 
 
-void TicTacToeService::OnRecv(Client* client, rapidjson::Document& data)
+void TicTacToeService::OnRecvInternal(Client* client, rapidjson::Document& data)
 {
 	switch(mFSM.GetState())
 	{
@@ -156,13 +194,15 @@ void TicTacToeService::AddClient(Client* client)
 }
 
 
-void TicTacToeService::RemoveClient(Client* client)
+bool TicTacToeService::RemoveClientInternal(Client* client)
 {
 	ClientList::iterator itor = std::find(m_Clients.begin(), m_Clients.end(), client);
 	if (itor != m_Clients.end())
 	{
 		m_Clients.erase(itor);
+		return true;
 	}
+	return false;
 }
 
 

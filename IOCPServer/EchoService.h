@@ -6,12 +6,8 @@ class Client;
 class EchoService
 {
 public:
-	EchoService(void);
-	~EchoService(void);
+	static void Init();
+	static void Shutdown();
 
-	void Init();
-	void Shutdown();
-
-	void Update();
-	void OnRecv(Client* client, rapidjson::Document& data);
+	static void OnRecv(Client* client, rapidjson::Document& data);
 };

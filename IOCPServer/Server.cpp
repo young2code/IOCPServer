@@ -113,7 +113,6 @@ Server::Server(void)
   m_listenSocket(INVALID_SOCKET),
   m_MaxPostAccept(0),
   m_NumPostAccept(0),
-  m_EchoService(NULL),
   m_ServiceTPWORK(NULL),
   m_LoopServiceUpdate(false)
 {
@@ -134,17 +133,16 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 	Packet::Init();
 
 	// Create Service
+	EchoService::Init();
+	TicTacToeService::Init();
 	InitializeCriticalSection(&m_CSForServices);
-	m_EchoService = new EchoService;
 	m_ServiceTPWORK = CreateThreadpoolWork(Server::WorkerServiceUpdate, this, NULL);
 	if(m_ServiceTPWORK == NULL)
 	{
 		ERROR_CODE(GetLastError(), "Could not create service worker TPIO.");
-		delete m_EchoService;
 		Destroy();
 		return false;
 	}	
-	m_EchoService->Init();
 	m_LoopServiceUpdate = true;
 	SubmitThreadpoolWork(m_ServiceTPWORK);	
 
@@ -250,19 +248,8 @@ void Server::Shutdown()
 
 	EnterCriticalSection(&m_CSForServices);
 	{
-		if (m_EchoService != NULL)
-		{
-			m_EchoService->Shutdown();
-			delete m_EchoService;
-			m_EchoService = NULL;
-		}
-
-		for (size_t i = 0 ; i < m_TicTacToeServices.size() ; ++i)
-		{
-			m_TicTacToeServices[i]->Shutdown();
-			delete m_TicTacToeServices[i];
-		}
-		m_TicTacToeServices.clear();
+		EchoService::Shutdown();
+		TicTacToeService::Shutdown();
 	}
 	DeleteCriticalSection(&m_CSForServices);
 
@@ -586,35 +573,19 @@ void Server::UpdateServices()
 
 			if (client->PopRecvData(data))
 			{
-				m_EchoService->OnRecv(client, data);
-
-				for (size_t i = 0; i < m_TicTacToeServices.size() ; ++i)
-				{
-					m_TicTacToeServices[i]->OnRecv(client, data);
-				}
-
-				TicTacToeService::CreateOrEnter(client, data, m_TicTacToeServices);
+				EchoService::OnRecv(client, data);
+				TicTacToeService::OnRecv(client, data);
 			}
 		}
 	}
 
-	m_EchoService->Update();
+	TicTacToeService::Update();
 
-	for (size_t i = 0; i < m_TicTacToeServices.size() ; ++i)
-	{
-		m_TicTacToeServices[i]->Update();
-	}
-
-	TicTacToeService::Flush(m_TicTacToeServices);
 }
 
 void Server::RemoveClientFromServices(Client* client)
 {
 	CSLocker lock(&m_CSForServices);
-
-	for (size_t i = 0; i < m_TicTacToeServices.size() ; ++i)
-	{
-		m_TicTacToeServices[i]->RemoveClient(client);
-	}
+	TicTacToeService::RemoveClient(client);
 }
 

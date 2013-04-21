@@ -10,20 +10,21 @@ class Client;
 class TicTacToeService
 {
 public:
-	TicTacToeService(void);
-	~TicTacToeService(void);
+	static void Init();
+	static void Shutdown();
 
-	void Init();
-	void Shutdown();
+	static void Update();
+	static void OnRecv(Client* client, rapidjson::Document& data);
 
-	void Update();
-	void OnRecv(Client* client, rapidjson::Document& data);
+	static void RemoveClient(Client* client);
 
-	void RemoveClient(Client* client);
+private:
+	static bool CreateOrEnter(Client* client, rapidjson::Document& data);
+	static void Flush();
 
-	static void CreateOrEnter(Client* client, rapidjson::Document& data, std::vector<TicTacToeService*>& list);
-
-	static void Flush(std::vector<TicTacToeService*>& list);
+private:
+	typedef std::vector<TicTacToeService*> ServiceList;
+	static ServiceList sServices;
 
 private:
 	enum State
@@ -57,7 +58,14 @@ private:
 	};
 
 private:
+	TicTacToeService(void);
+	~TicTacToeService(void);
+
+	void UpdateInternal();
+	void OnRecvInternal(Client* client, rapidjson::Document& data);
+
 	void AddClient(Client* client);
+	bool RemoveClientInternal(Client* client);
 
 	void InitFSM();
 	void ShutdownFSM();

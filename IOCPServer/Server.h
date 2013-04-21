@@ -10,7 +10,6 @@ class Client;
 class Packet;
 class IOEvent;
 
-class EchoService;
 class TicTacToeService;
 
 class Server :  public TSingleton<Server>
@@ -74,9 +73,6 @@ private:
 	ClientList m_Clients;
 	CRITICAL_SECTION m_CSForClients;
 
-	EchoService* m_EchoService;
-	typedef std::vector<TicTacToeService*> TicTacToeServiceList;
-	TicTacToeServiceList m_TicTacToeServices;
 	TP_WORK* m_ServiceTPWORK; 
 	volatile bool m_LoopServiceUpdate;
 	CRITICAL_SECTION m_CSForServices;

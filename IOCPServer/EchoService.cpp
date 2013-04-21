@@ -5,37 +5,24 @@
 #include "Server.h"
 #include "Client.h"
 #include "Packet.h"
+#include "Log.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
 
 
-EchoService::EchoService(void)
+/*static*/ void EchoService::Init()
 {
+	LOG("EchoService::Init()");
 }
 
-
-EchoService::~EchoService(void)
+/*static*/ void EchoService::Shutdown()
 {
+	LOG("EchoService::Init()");
 }
 
-
-void EchoService::Init()
-{
-}
-
-
-void EchoService::Shutdown()
-{
-}
-
-
-void EchoService::Update()
-{
-}
-
-void EchoService::OnRecv(Client* client, rapidjson::Document& data)
+/*static*/ void EchoService::OnRecv(Client* client, rapidjson::Document& data)
 {
 	assert(data["type"].IsString());
 	std::string type(data["type"].GetString());
