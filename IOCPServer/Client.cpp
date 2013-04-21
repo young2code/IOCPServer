@@ -11,6 +11,8 @@ namespace
 {
 	static int kCount = 0;
 }
+
+/*static*/ std::vector<Client*> Client::sClients;
 /* static */ Client::PoolType Client::sPool;
 /* static */ CRITICAL_SECTION Client::sPoolCS;
 
@@ -22,6 +24,14 @@ namespace
 
 /* static */ void Client::Shutdown()
 {
+	EnterCriticalSection(&sPoolCS);
+	{
+		for (int i = 0 ; i < sClients.size() ; ++i)
+		{
+			sPool.destroy(sClients[i]);
+		}
+		sClients.clear();
+	}
 	DeleteCriticalSection(&sPoolCS);
 }
 
@@ -30,6 +40,8 @@ namespace
 {
 	CSLocker lock(&sPoolCS);
 	Client* client = sPool.construct();
+	sClients.push_back(client);
+
 	if (client->CreateSocket())
 	{
 		return client;
@@ -45,6 +57,7 @@ namespace
 /* static */ void Client::Destroy(Client* client)
 {
 	CSLocker lock(&sPoolCS);
+	sClients.erase(std::remove(sClients.begin(), sClients.end(), client));
 	sPool.destroy(client);
 }
 

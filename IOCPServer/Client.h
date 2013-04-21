@@ -65,4 +65,7 @@ private:
 	friend PoolType;
 	static PoolType sPool;
 	static CRITICAL_SECTION sPoolCS;
+
+private:
+	static std::vector<Client*> sClients;
 };

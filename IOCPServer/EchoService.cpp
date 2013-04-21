@@ -19,7 +19,7 @@
 
 /*static*/ void EchoService::Shutdown()
 {
-	LOG("EchoService::Init()");
+	LOG("EchoService::Shutdown()");
 }
 
 /*static*/ void EchoService::OnRecv(Client* client, rapidjson::Document& data)

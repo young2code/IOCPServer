@@ -47,27 +47,45 @@ void main(int argc, char* argv[])
 	{
 		std::getline(cin, input);
 
-		if(input == "`client_size")
+		if (input == "`client_size")
 		{
 			LOG(" Number of Clients : %d", Server::Instance()->GetNumClients());
 		}
-		if(input == "`accept_size")
+		else if (input == "`accept_size")
 		{
 			LOG(" Number of Accept posts : %d", Server::Instance()->GetNumPostAccepts());
 		}
-		else if(input == "`enable_trace")
+		else if (input == "`enable_trace")
 		{
 			Log::EnableTrace(true);
 		}
-		else if(input == "`disable_trace")
+		else if (input == "`disable_trace")
 		{
 			Log::EnableTrace(false);
 		}
-		// we should have a way to cancel thread works started by TrySubmitThreadpoolCallback
-		//else if  (input == "`shutdown")
-		//{
-		//	loop = false;
-		//}
+		else if  (input == "`shutdown")
+		{
+			loop = false;
+		}
+		else 
+		{
+			cout << "WRONG COMMAND." << endl;
+			cout << "`client_size : return the number of clients connected." << endl;
+			cout << "`accept_size : return the number of accept calls posted." << endl;
+			cout << "`enable_trace : enable trace." << endl;
+			cout << "`disable_trace : disable trace." << endl;
+			cout << "`shutdown : shut it down." << endl;
+
+			cout << endl;
+			if (Log::IsEnabled())
+			{
+				cout << "Logging is enabled." << endl;
+			}
+			else
+			{
+				cout << "Logging is disabled." << endl;
+			}
+		}
 	}
 
 	Server::Instance()->Shutdown();

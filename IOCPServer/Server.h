@@ -60,20 +60,23 @@ private:
 	Server(const Server& rhs);
 
 private:
-	TP_IO* m_pTPIO;
+	TP_IO* m_ListenTPIO;
 	SOCKET m_listenSocket;
 
 	TP_WORK* m_AcceptTPWORK; 
-	volatile bool m_LoopPostAccept;
 
 	int	m_MaxPostAccept;
 	volatile long m_NumPostAccept;
+
+	TP_CALLBACK_ENVIRON m_ClientTPENV;
+	TP_CLEANUP_GROUP* m_ClientTPCLEAN;
 
 	typedef std::vector<Client*> ClientList;
 	ClientList m_Clients;
 	CRITICAL_SECTION m_CSForClients;
 
 	TP_WORK* m_ServiceTPWORK; 
-	volatile bool m_LoopServiceUpdate;
 	CRITICAL_SECTION m_CSForServices;
+
+	volatile bool m_ShuttingDown;
 };

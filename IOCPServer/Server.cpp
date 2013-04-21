@@ -67,7 +67,7 @@ void CALLBACK Server::WorkerPostAccept(PTP_CALLBACK_INSTANCE /* Instance */, PVO
 	Server* server = static_cast<Server*>(Context);
 	assert(server);
 
-	while(server->m_LoopPostAccept)
+	while(!server->m_ShuttingDown)
 	{
 		server->PostAccept();
 	}
@@ -79,7 +79,7 @@ void CALLBACK Server::WorkerServiceUpdate(PTP_CALLBACK_INSTANCE /* Instance */, 
 	Server* server = static_cast<Server*>(Context);
 	assert(server);
 
-	while(server->m_LoopServiceUpdate)
+	while(!server->m_ShuttingDown)
 	{
 		server->UpdateServices();
 	}
@@ -107,14 +107,14 @@ void CALLBACK Server::WorkerRemoveClient(PTP_CALLBACK_INSTANCE /* Instance */, P
 //---------------------------------------------------------------------------------//
 //---------------------------------------------------------------------------------//
 Server::Server(void)
-: m_pTPIO(NULL),
+: m_ListenTPIO(NULL),
   m_AcceptTPWORK(NULL),
-  m_LoopPostAccept(false),
   m_listenSocket(INVALID_SOCKET),
   m_MaxPostAccept(0),
   m_NumPostAccept(0),
   m_ServiceTPWORK(NULL),
-  m_LoopServiceUpdate(false)
+  m_ClientTPCLEAN(NULL),
+  m_ShuttingDown(true)
 {
 }
 
@@ -143,8 +143,16 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 		Destroy();
 		return false;
 	}	
-	m_LoopServiceUpdate = true;
-	SubmitThreadpoolWork(m_ServiceTPWORK);	
+
+	// Create Client Work Thread Env for using cleaning group. We need this for shutting down properly.
+	InitializeThreadpoolEnvironment(&m_ClientTPENV);
+	m_ClientTPCLEAN = CreateThreadpoolCleanupGroup();
+	if (m_ClientTPCLEAN == NULL)
+	{
+		ERROR_CODE(GetLastError(), "Could not create client cleaning group.");
+		return false;
+	}
+	SetThreadpoolCallbackCleanupGroup(&m_ClientTPENV, m_ClientTPCLEAN, NULL);
 
 	// Create Listen Socket
 	m_MaxPostAccept = maxPostAccept;
@@ -173,8 +181,8 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 	}
 
 	// Create & Start ThreaddPool for socket IO
-	m_pTPIO = CreateThreadpoolIo(reinterpret_cast<HANDLE>(m_listenSocket), Server::IoCompletionCallback, NULL, NULL);
-	if( m_pTPIO == NULL )
+	m_ListenTPIO = CreateThreadpoolIo(reinterpret_cast<HANDLE>(m_listenSocket), Server::IoCompletionCallback, NULL, NULL);
+	if( m_ListenTPIO == NULL )
 	{
 		ERROR_CODE(WSAGetLastError(), "Could not assign the listen socket to the IOCP handle.");
 		Destroy();
@@ -182,7 +190,7 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 	}
 
 	// Start listening
-	StartThreadpoolIo( m_pTPIO );
+	StartThreadpoolIo( m_ListenTPIO );
 	if(listen(m_listenSocket, SOMAXCONN) == SOCKET_ERROR)
 	{
 		ERROR_CODE(WSAGetLastError(), "listen() failed.");
@@ -200,8 +208,11 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 		Destroy();
 		return false;
 	}	
-	m_LoopPostAccept = true;
+
+	m_ShuttingDown = false;
+
 	SubmitThreadpoolWork(m_AcceptTPWORK);
+	SubmitThreadpoolWork(m_ServiceTPWORK);	
 
 	return true;
 }
@@ -209,9 +220,10 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 
 void Server::Shutdown()
 {
+	m_ShuttingDown = true;
+
 	if( m_AcceptTPWORK != NULL )
 	{
-		m_LoopPostAccept = false;
 		WaitForThreadpoolWorkCallbacks( m_AcceptTPWORK, true );
 		CloseThreadpoolWork( m_AcceptTPWORK );
 		m_AcceptTPWORK = NULL;
@@ -224,34 +236,45 @@ void Server::Shutdown()
 		m_listenSocket = INVALID_SOCKET;
 	}
 
-	if( m_pTPIO != NULL )
+	if( m_ListenTPIO != NULL )
 	{
-		WaitForThreadpoolIoCallbacks( m_pTPIO, true );
-		CloseThreadpoolIo( m_pTPIO );
-		m_pTPIO = NULL;
+		WaitForThreadpoolIoCallbacks( m_ListenTPIO, true );
+		CloseThreadpoolIo( m_ListenTPIO );
+		m_ListenTPIO = NULL;
 	}
 
-	EnterCriticalSection(&m_CSForClients);
+	if (m_ClientTPCLEAN != NULL)
 	{
+		CloseThreadpoolCleanupGroupMembers(m_ClientTPCLEAN, false, NULL);
+		CloseThreadpoolCleanupGroup(m_ClientTPCLEAN);
+		DestroyThreadpoolEnvironment(&m_ClientTPENV);
+		m_ClientTPCLEAN = NULL;
+	}
+	
+	{
+		CSLocker lock(&m_CSForClients);
 		for(ClientList::iterator itor = m_Clients.begin() ; itor != m_Clients.end() ; ++itor)	
 		{
 			Client::Destroy(*itor);
 		}
 		m_Clients.clear();
 	}
-	DeleteCriticalSection(&m_CSForClients);
 
-	m_LoopServiceUpdate = false;
-	WaitForThreadpoolWorkCallbacks( m_ServiceTPWORK, true );
-	CloseThreadpoolWork( m_ServiceTPWORK );
-	m_ServiceTPWORK = NULL;
-
-	EnterCriticalSection(&m_CSForServices);
+	if (m_ServiceTPWORK != NULL)
 	{
+		WaitForThreadpoolWorkCallbacks( m_ServiceTPWORK, true );
+		CloseThreadpoolWork( m_ServiceTPWORK );
+		m_ServiceTPWORK = NULL;
+	}
+
+	{
+		CSLocker lock(&m_CSForServices);
 		EchoService::Shutdown();
 		TicTacToeService::Shutdown();
 	}
+
 	DeleteCriticalSection(&m_CSForServices);
+	DeleteCriticalSection(&m_CSForClients);
 
 	Packet::Shutdown();
 	IOEvent::Shutdown();
@@ -278,14 +301,14 @@ void Server::PostAccept()
 			IOEvent* event = IOEvent::Create(IOEvent::ACCEPT, client);
 			assert(event);
 
-			StartThreadpoolIo( m_pTPIO );
+			StartThreadpoolIo( m_ListenTPIO );
 			if ( FALSE == Network::AcceptEx(m_listenSocket, client->GetSocket(), &event->GetOverlapped()))
 			{
 				int error = WSAGetLastError();
 
 				if(error != ERROR_IO_PENDING)
 				{
-					CancelThreadpoolIo( m_pTPIO );
+					CancelThreadpoolIo( m_ListenTPIO );
 
 					ERROR_CODE(error, "AcceptEx() failed.");
 					Client::Destroy(client);
@@ -403,7 +426,7 @@ void Server::OnAccept(IOEvent* event)
 	// Add client in a different thread.
 	// It is because we need to return this function ASAP so that this IO worker thread can process the other IO notifications.
 	// If adding client is fast enough, we can call it here but I assume it's slow.	
-	if(TrySubmitThreadpoolCallback(Server::WorkerAddClient, event->GetClient(), NULL) == false)
+	if(!m_ShuttingDown && TrySubmitThreadpoolCallback(Server::WorkerAddClient, event->GetClient(), &m_ClientTPENV) == false)
 	{
 		ERROR_CODE(GetLastError(), "Could not start `.");
 
@@ -539,7 +562,7 @@ void Server::PostBoradcast(Packet* packet)
 
 void Server::RequestRemoveClient(Client* client)
 {
-	if(TrySubmitThreadpoolCallback(Server::WorkerRemoveClient, client, NULL) == false)
+	if(!m_ShuttingDown && TrySubmitThreadpoolCallback(Server::WorkerRemoveClient, client, &m_ClientTPENV) == false)
 	{
 		ERROR_CODE(GetLastError(), "can't start WorkerRemoveClient. call it directly.");
 
