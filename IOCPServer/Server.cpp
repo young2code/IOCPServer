@@ -81,7 +81,7 @@ void CALLBACK Server::WorkerServiceUpdate(PTP_CALLBACK_INSTANCE /* Instance */, 
 
 	while(server->m_LoopServiceUpdate)
 	{
-		server->UpdateService();
+		server->UpdateServices();
 	}
 }
 
@@ -113,7 +113,7 @@ Server::Server(void)
   m_listenSocket(INVALID_SOCKET),
   m_MaxPostAccept(0),
   m_NumPostAccept(0),
-  m_Service(NULL),
+  m_EchoService(NULL),
   m_ServiceTPWORK(NULL),
   m_LoopServiceUpdate(false)
 {
@@ -134,17 +134,17 @@ bool Server::Init(unsigned short port, int maxPostAccept)
 	Packet::Init();
 
 	// Create Service
-	//m_Service = new EchoService;
-	m_Service = new TicTacToeService;
+	InitializeCriticalSection(&m_CSForServices);
+	m_EchoService = new EchoService;
 	m_ServiceTPWORK = CreateThreadpoolWork(Server::WorkerServiceUpdate, this, NULL);
 	if(m_ServiceTPWORK == NULL)
 	{
 		ERROR_CODE(GetLastError(), "Could not create service worker TPIO.");
-		delete m_Service;
+		delete m_EchoService;
 		Destroy();
 		return false;
 	}	
-	m_Service->Init();
+	m_EchoService->Init();
 	m_LoopServiceUpdate = true;
 	SubmitThreadpoolWork(m_ServiceTPWORK);	
 
@@ -233,8 +233,8 @@ void Server::Shutdown()
 		m_pTPIO = NULL;
 	}
 
+	EnterCriticalSection(&m_CSForClients);
 	{
-		CSLocker lock(&m_CSForClients);
 		for(ClientList::iterator itor = m_Clients.begin() ; itor != m_Clients.end() ; ++itor)	
 		{
 			Client::Destroy(*itor);
@@ -243,18 +243,28 @@ void Server::Shutdown()
 	}
 	DeleteCriticalSection(&m_CSForClients);
 
-	if (m_Service != NULL)
+	m_LoopServiceUpdate = false;
+	WaitForThreadpoolWorkCallbacks( m_ServiceTPWORK, true );
+	CloseThreadpoolWork( m_ServiceTPWORK );
+	m_ServiceTPWORK = NULL;
+
+	EnterCriticalSection(&m_CSForServices);
 	{
-		m_LoopServiceUpdate = false;
-		WaitForThreadpoolWorkCallbacks( m_ServiceTPWORK, true );
-		CloseThreadpoolWork( m_ServiceTPWORK );
-		m_ServiceTPWORK = NULL;
+		if (m_EchoService != NULL)
+		{
+			m_EchoService->Shutdown();
+			delete m_EchoService;
+			m_EchoService = NULL;
+		}
 
-		m_Service->Shutdown();
-		delete m_Service;
-		m_Service = NULL;
+		for (size_t i = 0 ; i < m_TicTacToeServices.size() ; ++i)
+		{
+			m_TicTacToeServices[i]->Shutdown();
+			delete m_TicTacToeServices[i];
+		}
+		m_TicTacToeServices.clear();
 	}
-
+	DeleteCriticalSection(&m_CSForServices);
 
 	Packet::Shutdown();
 	IOEvent::Shutdown();
@@ -314,6 +324,11 @@ void Server::PostRecv(Client* client)
 {
 	assert(client);
 
+	if (client->GetState() != Client::ACCEPTED)
+	{
+		return;
+	}
+
 	WSABUF recvBufferDescriptor;
 	recvBufferDescriptor.buf = reinterpret_cast<char*>(client->GetRecvCallBuff());
 	recvBufferDescriptor.len = Client::MAX_DATA_SIZE;
@@ -351,6 +366,11 @@ void Server::PostSend(Client* client, Packet* packet)
 {
 	assert(client);
 	assert(packet);
+
+	if (client->GetState() != Client::ACCEPTED)
+	{
+		return;
+	}
 
 	WSABUF recvBufferDescriptor;
 	recvBufferDescriptor.buf = reinterpret_cast<char*>(packet->GetData());
@@ -491,11 +511,7 @@ void Server::AddClient(Client* client)
 				m_Clients.push_back(client);
 			}
 
-			if (m_LoopServiceUpdate)
-			{
-				m_Service->AddClient(client);
-			}
-		
+	
 			PostRecv(client);
 		}
 	}
@@ -506,21 +522,19 @@ void Server::RemoveClient(Client* client)
 {
 	assert(client);
 
-	CSLocker lock(&m_CSForClients);
-
-	ClientList::iterator itor = std::remove(m_Clients.begin(), m_Clients.end(), client);
-
-	if(itor != m_Clients.end())
 	{
-		m_Clients.erase(itor);
+		CSLocker lock(&m_CSForClients);
+		ClientList::iterator itor = std::remove(m_Clients.begin(), m_Clients.end(), client);
 
-		if (m_LoopServiceUpdate)
+		if(itor != m_Clients.end())
 		{
-			m_Service->RemoveClient(client);
+			m_Clients.erase(itor);
 		}
-
-		Client::Destroy(client);
 	}
+
+	RemoveClientFromServices(client);
+
+	Client::Destroy(client);
 }
 
 void Server::PostBoradcast(Packet* packet)
@@ -559,7 +573,48 @@ long Server::GetNumPostAccepts()
 }
 
 
-void Server::UpdateService()
+void Server::UpdateServices()
 {
-	m_Service->Update();
+	CSLocker lock(&m_CSForServices);
+
+	{
+		CSLocker lockClients(&m_CSForClients);
+		for(ClientList::iterator itor = m_Clients.begin() ; itor != m_Clients.end() ; ++itor)
+		{
+			Client* client = *itor;
+			rapidjson::Document data;
+
+			if (client->PopRecvData(data))
+			{
+				m_EchoService->OnRecv(client, data);
+
+				for (size_t i = 0; i < m_TicTacToeServices.size() ; ++i)
+				{
+					m_TicTacToeServices[i]->OnRecv(client, data);
+				}
+
+				TicTacToeService::CreateOrEnter(client, data, m_TicTacToeServices);
+			}
+		}
+	}
+
+	m_EchoService->Update();
+
+	for (size_t i = 0; i < m_TicTacToeServices.size() ; ++i)
+	{
+		m_TicTacToeServices[i]->Update();
+	}
+
+	TicTacToeService::Flush(m_TicTacToeServices);
 }
+
+void Server::RemoveClientFromServices(Client* client)
+{
+	CSLocker lock(&m_CSForServices);
+
+	for (size_t i = 0; i < m_TicTacToeServices.size() ; ++i)
+	{
+		m_TicTacToeServices[i]->RemoveClient(client);
+	}
+}
+

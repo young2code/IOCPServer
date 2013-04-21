@@ -2,6 +2,7 @@
 
 #include <winsock2.h>
 #include <vector>
+#include <rapidjson\document.h>
 
 #include "TSingleton.h"
 
@@ -52,7 +53,8 @@ private:
 	void AddClient(Client* client);
 	void RemoveClient(Client* client);
 
-	void UpdateService();
+	void UpdateServices();
+	void RemoveClientFromServices(Client* client);
 
 private:
 	Server& operator=(Server& rhs);
@@ -65,16 +67,17 @@ private:
 	TP_WORK* m_AcceptTPWORK; 
 	volatile bool m_LoopPostAccept;
 
-	typedef std::vector<Client*> ClientList;
-	ClientList m_Clients;
-
 	int	m_MaxPostAccept;
 	volatile long m_NumPostAccept;
 
+	typedef std::vector<Client*> ClientList;
+	ClientList m_Clients;
 	CRITICAL_SECTION m_CSForClients;
 
-	//EchoService* m_Service;
-	TicTacToeService* m_Service;
+	EchoService* m_EchoService;
+	typedef std::vector<TicTacToeService*> TicTacToeServiceList;
+	TicTacToeServiceList m_TicTacToeServices;
 	TP_WORK* m_ServiceTPWORK; 
 	volatile bool m_LoopServiceUpdate;
+	CRITICAL_SECTION m_CSForServices;
 };

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <winsock2.h>
 #include <vector>
 #include <rapidjson/document.h>
 
@@ -18,16 +17,18 @@ public:
 	void Shutdown();
 
 	void Update();
+	void OnRecv(Client* client, rapidjson::Document& data);
 
-	void AddClient(Client* client);
 	void RemoveClient(Client* client);
+
+	static void CreateOrEnter(Client* client, rapidjson::Document& data, std::vector<TicTacToeService*>& list);
+
+	static void Flush(std::vector<TicTacToeService*>& list);
 
 private:
 	enum State
 	{
 		kStateWait,
-		kStateStart,
-		kStateSetPlayers,
 		kStatePlayer1Turn,
 		kStatePlayer2Turn,
 		kStateCheckResult,
@@ -56,52 +57,51 @@ private:
 	};
 
 private:
+	void AddClient(Client* client);
+
 	void InitFSM();
 	void ShutdownFSM();
 
 	void OnEnterWait(int nPrevState);
-	void OnUpdateWait();
+	void OnUpdateWait(Client* client, rapidjson::Document& data);
 	void OnLeaveWait(int nNextState);
 
-	void OnEnterStart(int nPrevState);
-	void OnUpdateStart();
-	void OnLeaveStart(int nNextState);
-
-	void OnEnterSetPlayers(int nPrevState);
-	void OnUpdateSetPlayers();
-	void OnLeaveSetPlayers(int nNextState);
-
 	void OnEnterPlayer1Turn(int nPrevState);
-	void OnUpdatePlayer1Turn();
+	void OnUpdatePlayer1Turn(Client* client, rapidjson::Document& data);
 	void OnLeavePlayer1Turn(int nNextState);
 
 	void OnEnterPlayer2Turn(int nPrevState);
-	void OnUpdatePlayer2Turn();
+	void OnUpdatePlayer2Turn(Client* client, rapidjson::Document& data);
 	void OnLeavePlayer2Turn(int nNextState);
 
 	void OnEnterCheckResult(int nPrevState);
-	void OnUpdateCheckResult();
+	void OnUpdateCheckResult(Client* client, rapidjson::Document& data);
 	void OnLeaveCheckResult(int nNextState);
 
 	void OnEnterGameCanceled(int nPrevState);
-	void OnUpdateGameCanceled();
+	void OnUpdateGameCanceled(Client* client, rapidjson::Document& data);
 	void OnLeaveGameCanceled(int nNextState);
+
+	void DummyUpdate() {}
 
 	void CheckPlayerConnection();
 
-
-	void SetPlayerName(Player& player);
+	void SetPlayerName(Player& player, rapidjson::Document& data);
 	void SetPlayerTurn(int playerTurn);
-	void CheckPlayerMove(Player& player, Symbol symbol);
+	void CheckPlayerMove(Player& player, Symbol symbol, rapidjson::Document& data);
 	void SetGameEnd(Symbol winning);
 
-	void Send(Player& player, rapidjson::Document& data);
+	bool CheckRowStraight(int col, Symbol symbol);
+	bool CheckColStraight(int row, Symbol symbol);
+	bool CheckSlashStraight(Symbol symbol);
+	bool CheckBackSlashStraight(Symbol symbol);
+
+	void Send(Client* client, rapidjson::Document& data);
 	void Broadcast(rapidjson::Document& data);
 
 private:
 	typedef std::vector<Client*> ClientList;
 	ClientList m_Clients;
-	CRITICAL_SECTION m_CSForClients;
 
 	FSM mFSM;
 	Player mPlayer1;
